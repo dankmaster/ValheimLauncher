@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   build-and-release:
@@ -18,7 +19,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch all history and tags
+          fetch-depth: 0  # Fetch all history and tags
 
       - name: Get Latest Tag
         id: get_latest_tag
@@ -32,7 +33,16 @@ jobs:
             $latestTag = git describe --tags --abbrev=0 2>$null
           }
           Write-Output "Latest tag: $latestTag"
-          echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
+          "latest_tag=$latestTag" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Validate Version Format
+        if: github.event.inputs.version != ''
+        shell: pwsh
+        run: |
+          if ("${{ github.event.inputs.version }}" -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "Invalid version format. Must be in format 'vX.Y.Z'"
+            exit 1
+          }
 
       - name: Calculate New Version
         id: calculate_version
@@ -41,10 +51,8 @@ jobs:
           $latestTag = "${{ env.latest_tag }}"
           Write-Output "Debug: latestTag=$latestTag"
           if ("${{ github.event.inputs.version }}" -ne "") {
-            # Use manual version if provided
             $newVersion = "${{ github.event.inputs.version }}"
           } else {
-            # Parse latest tag and increment patch version
             if ($latestTag -eq "v0.0.0") {
               $newVersion = "v1.0.0"
             } else {
@@ -56,7 +64,7 @@ jobs:
             }
           }
           Write-Output "Debug: Calculated newVersion=$newVersion"
-          echo "new_version=$newVersion" >> $GITHUB_ENV
+          "new_version=$newVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
           
       - name: Debug Environment After Version Calculation
         run: |
@@ -64,11 +72,20 @@ jobs:
           echo "latest_tag=${{ env.latest_tag }}"
           echo "new_version=${{ env.new_version }}"
 
-
-      - name: Display New Version
+      - name: Generate Changelog
+        id: changelog
+        shell: pwsh
         run: |
-          echo "Releasing version ${{ env.new_version }}"
-          echo "Debug: env.new_version = ${{ env.new_version }}"
+          $previousTag = git describe --tags --abbrev=0 HEAD^ 2>$null
+          if ($?) {
+            $changelog = git log --pretty=format:"* %s" "$previousTag..HEAD"
+          } else {
+            $changelog = git log --pretty=format:"* %s"
+          }
+          $changelog = $changelog -replace "'", "''" -replace "`n", "%0A"
+          "CHANGELOG<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $changelog | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -87,12 +104,6 @@ jobs:
       - name: Archive Build Artifacts
         run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
-      - name: Debug Environment
-        run: |
-          echo "Debugging Environment Variables"
-          echo "latest_tag=${{ env.latest_tag }}"
-          echo "new_version=${{ env.new_version }}"
-
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -101,11 +112,15 @@ jobs:
         with:
           tag_name: ${{ env.new_version }}
           release_name: "Release ${{ env.new_version }}"
+          body: |
+            ${{ env.CHANGELOG }}
           draft: false
           prerelease: false
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: './ValheimLauncher.zip'
@@ -115,5 +130,12 @@ jobs:
       - name: Push New Tag
         shell: pwsh
         run: |
-          git tag ${{ env.new_version }}
-          git push origin ${{ env.new_version }}
+          try {
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git tag ${{ env.new_version }}
+            git push origin ${{ env.new_version }}
+          } catch {
+            Write-Error "Failed to create and push tag: $_"
+            exit 1
+          }
