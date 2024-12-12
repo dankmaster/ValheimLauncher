@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,137 +7,300 @@ using System.Linq;
 using System.Net.Http;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Reflection;
 using Microsoft.Win32;
 
 class Program
 {
-    private static string GithubZipUrl = "https://github.com/dankmaster/vhserver/raw/refs/heads/main/plugins.zip";
-    private static string TempFolderPath = Path.Combine(Path.GetTempPath(), "ValheimMods");
-    private static string TempZipPath = Path.Combine(TempFolderPath, "mods.zip");
-    private static string ExtractedTempPath = Path.Combine(TempFolderPath, "mods_extracted");
-    private static string SteamAppID = "892970";
+    private const string GithubApiBaseUrl = "https://api.github.com/repos/dankmaster/vhserver";
+    private const string GithubRawBaseUrl = "https://github.com/dankmaster/vhserver/raw";
+    private static readonly string AppDataPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "ValheimLauncher"
+    );
+    private static readonly string LauncherVersionFile = Path.Combine(AppDataPath, "version.json");
+    private static readonly string TempFolderPath = Path.Combine(Path.GetTempPath(), "ValheimMods");
+    private static readonly string TempZipPath = Path.Combine(TempFolderPath, "mods.zip");
+    private static readonly string ExtractedTempPath = Path.Combine(TempFolderPath, "mods_extracted");
+    private const string SteamAppID = "892970";
+    private static readonly HttpClient httpClient = new HttpClient();
 
     static async Task Main()
     {
+        Console.Title = "Valheim Mod Launcher";
+        DisplayWelcomeMessage();
+
         try
         {
+            // Ensure directories exist
             Directory.CreateDirectory(TempFolderPath);
+            Directory.CreateDirectory(AppDataPath);
 
-            string? pluginsFolder = GetPluginsFolder();
-            if (string.IsNullOrEmpty(pluginsFolder))
+            // Check for launcher updates first
+            if (await CheckForLauncherUpdate())
             {
-                Console.WriteLine("Valheim installation not found. Exiting.");
+                Console.WriteLine("Press any key to exit and install the update...");
+                Console.ReadKey();
                 return;
             }
 
-            if (await TestUpdateNeeded(pluginsFolder))
+            // Find Valheim installation
+            string? pluginsFolder = GetPluginsFolder();
+            if (string.IsNullOrEmpty(pluginsFolder))
             {
-                UpdateMods(pluginsFolder);
+                Console.WriteLine("❌ Valheim installation not found.");
+                WaitForUserExit();
+                return;
             }
 
-            Console.WriteLine("Launching Valheim...");
+            Console.WriteLine($"✅ Found Valheim plugins folder: {pluginsFolder}");
+
+            // Check for mod updates
+            Console.WriteLine("\nChecking for mod updates...");
+            if (await TestUpdateNeeded(pluginsFolder))
+            {
+                Console.WriteLine("🔄 Mod updates available!");
+                await UpdateMods(pluginsFolder);
+            }
+            else
+            {
+                Console.WriteLine("✅ Mods are up to date!");
+            }
+
+            // Launch game
+            Console.WriteLine("\n🎮 Launching Valheim...");
             Process.Start(new ProcessStartInfo($"steam://rungameid/{SteamAppID}") { UseShellExecute = true });
 
-            Cleanup();
+            WaitForUserExit();
         }
         catch (Exception ex)
         {
-            Console.WriteLine("An error occurred: " + ex.Message);
+            Console.WriteLine($"\n❌ An error occurred: {ex.Message}");
+            Console.WriteLine("\nStack trace:");
+            Console.WriteLine(ex.StackTrace);
+            WaitForUserExit();
+        }
+        finally
+        {
+            Cleanup();
         }
     }
 
-    private static async Task DownloadFileAsync(string url, string destinationPath)
+    private static void DisplayWelcomeMessage()
     {
-        using (HttpClient client = new HttpClient())
-        using (HttpResponseMessage response = await client.GetAsync(url))
-        using (Stream stream = await response.Content.ReadAsStreamAsync())
+        Console.WriteLine("=================================");
+        Console.WriteLine("   Valheim Mod Launcher v" + Assembly.GetExecutingAssembly().GetName().Version);
+        Console.WriteLine("=================================\n");
+    }
+
+    private static async Task<bool> CheckForLauncherUpdate()
+    {
+        try
         {
-            using (FileStream fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ValheimLauncher");
+            var response = await httpClient.GetAsync($"{GithubApiBaseUrl}/releases/latest");
+
+            if (!response.IsSuccessStatusCode) return false;
+
+            var releaseJson = await response.Content.ReadAsStringAsync();
+            var releaseInfo = JsonSerializer.Deserialize<JsonElement>(releaseJson);
+            var latestVersion = releaseInfo.GetProperty("tag_name").GetString();
+            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
+
+            if (latestVersion != null && IsNewerVersion(latestVersion, currentVersion))
             {
-                await stream.CopyToAsync(fileStream);
+                Console.WriteLine($"🔄 New launcher version available: {latestVersion}");
+                Console.WriteLine("Starting update process...");
+
+                // Download and prepare the update
+                var assetUrl = releaseInfo.GetProperty("assets")[0].GetProperty("browser_download_url").GetString();
+                if (assetUrl != null)
+                {
+                    var updatePath = Path.Combine(AppDataPath, "update.zip");
+                    await DownloadFileAsync(assetUrl, updatePath);
+
+                    // Create update batch script
+                    CreateUpdateScript(updatePath);
+                    return true;
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Failed to check for updates: {ex.Message}");
+        }
+        return false;
     }
 
-    private static void Cleanup()
+    private static void CreateUpdateScript(string updatePath)
     {
-        if (Directory.Exists(ExtractedTempPath))
-        {
-            Directory.Delete(ExtractedTempPath, true);
-        }
+        var currentExe = Process.GetCurrentProcess().MainModule?.FileName;
+        if (currentExe == null) return;
 
-        if (File.Exists(TempZipPath))
-        {
-            File.Delete(TempZipPath);
-        }
+        var scriptPath = Path.Combine(AppDataPath, "update.bat");
+        var script = $@"@echo off
+timeout /t 2 /nobreak
+del ""{currentExe}""
+powershell Expand-Archive -Path ""{updatePath}"" -DestinationPath ""{Path.GetDirectoryName(currentExe)}"" -Force
+del ""{updatePath}""
+start """" ""{currentExe}""
+del ""%~f0""";
+
+        File.WriteAllText(scriptPath, script);
+        Process.Start(new ProcessStartInfo(scriptPath) { UseShellExecute = true });
+    }
+
+    private static bool IsNewerVersion(string latestVersion, string currentVersion)
+    {
+        var latest = new Version(latestVersion.TrimStart('v'));
+        var current = new Version(currentVersion);
+        return latest > current;
     }
 
     private static async Task<bool> TestUpdateNeeded(string pluginsFolder)
     {
-        Console.WriteLine("Downloading mods for checksum verification...");
-        await DownloadFileAsync(GithubZipUrl, TempZipPath);
-
-        if (Directory.Exists(ExtractedTempPath))
+        try
         {
-            Directory.Delete(ExtractedTempPath, true);
+            Console.WriteLine("📥 Downloading mod information...");
+            await DownloadFileAsync($"{GithubRawBaseUrl}/main/plugins.zip", TempZipPath);
+
+            if (Directory.Exists(ExtractedTempPath))
+            {
+                Directory.Delete(ExtractedTempPath, true);
+            }
+
+            ZipFile.ExtractToDirectory(TempZipPath, ExtractedTempPath);
+
+            string remoteChecksum = CalculateFolderChecksum(ExtractedTempPath);
+            string localChecksum = CalculateFolderChecksum(pluginsFolder);
+
+            return remoteChecksum != localChecksum;
         }
-
-        ZipFile.ExtractToDirectory(TempZipPath, ExtractedTempPath);
-
-        string remoteChecksum = CalculateFolderChecksum(ExtractedTempPath);
-        string localChecksum = CalculateFolderChecksum(pluginsFolder);
-
-        return remoteChecksum != localChecksum;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Error checking for updates: {ex.Message}");
+            return false;
+        }
     }
 
-    private static void UpdateMods(string pluginsFolder)
+    private static async Task UpdateMods(string pluginsFolder)
     {
-        Console.Write($"Do you want to delete existing mods in {pluginsFolder}? (Yes/No): ");
+        Console.Write($"\n⚠️ Do you want to update mods in {pluginsFolder}? (Yes/No): ");
         string? response = Console.ReadLine();
         if (string.IsNullOrEmpty(response) || !response.Equals("Yes", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Update aborted by the user.");
+            Console.WriteLine("❌ Update aborted by user.");
             return;
         }
 
+        Console.WriteLine("\n🔄 Updating mods...");
+        Console.WriteLine("Removing old mods...");
+
+        // Delete old files
         foreach (var file in Directory.GetFiles(pluginsFolder, "*", SearchOption.AllDirectories))
         {
             File.Delete(file);
+            Console.WriteLine($"Removed: {Path.GetFileName(file)}");
         }
 
         foreach (var dir in Directory.GetDirectories(pluginsFolder))
         {
             Directory.Delete(dir, true);
+            Console.WriteLine($"Removed directory: {Path.GetFileName(dir)}");
         }
 
-        string? extractedMainDir = Directory.GetDirectories(ExtractedTempPath).FirstOrDefault();
-        if (string.IsNullOrEmpty(extractedMainDir))
-        {
-            Console.WriteLine("No extracted directory found. Cannot update.");
-            return;
-        }
+        Console.WriteLine("\nInstalling new mods...");
 
+        // Copy new files
         CopyAll(new DirectoryInfo(ExtractedTempPath), new DirectoryInfo(pluginsFolder));
+
+        Console.WriteLine("✅ Mods updated successfully!");
+    }
+
+    private static async Task DownloadFileAsync(string url, string destinationPath)
+    {
+        using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength ?? -1L;
+        using var contentStream = await response.Content.ReadAsStreamAsync();
+        using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
+
+        var buffer = new byte[8192];
+        var totalBytesRead = 0L;
+        int bytesRead;
+
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
+        {
+            await fileStream.WriteAsync(buffer, 0, bytesRead);
+            totalBytesRead += bytesRead;
+
+            if (totalBytes != -1)
+            {
+                var percentage = (int)((totalBytesRead * 100) / totalBytes);
+                Console.Write($"\rDownload progress: {percentage}%");
+            }
+        }
+        Console.WriteLine();
+    }
+
+    private static void Cleanup()
+    {
+        try
+        {
+            if (Directory.Exists(ExtractedTempPath))
+            {
+                Directory.Delete(ExtractedTempPath, true);
+            }
+
+            if (File.Exists(TempZipPath))
+            {
+                File.Delete(TempZipPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Cleanup error: {ex.Message}");
+        }
     }
 
     private static void CopyAll(DirectoryInfo source, DirectoryInfo target)
     {
-        if (!Directory.Exists(target.FullName))
+        try
         {
-            Directory.CreateDirectory(target.FullName);
-        }
+            if (!Directory.Exists(target.FullName))
+            {
+                Directory.CreateDirectory(target.FullName);
+            }
 
-        foreach (FileInfo fi in source.GetFiles())
-        {
-            fi.CopyTo(Path.Combine(target.ToString(), fi.Name), true);
-        }
+            foreach (FileInfo fi in source.GetFiles())
+            {
+                try
+                {
+                    string destinationPath = Path.Combine(target.FullName, fi.Name);
+                    fi.CopyTo(destinationPath, true);
+                    Console.WriteLine($"Installed: {fi.Name}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Failed to copy {fi.Name}: {ex.Message}");
+                }
+            }
 
-        foreach (DirectoryInfo diSourceSubDir in source.GetDirectories())
+            foreach (DirectoryInfo diSourceSubDir in source.GetDirectories())
+            {
+                DirectoryInfo nextTargetSubDir = target.CreateSubdirectory(diSourceSubDir.Name);
+                Console.WriteLine($"Created directory: {diSourceSubDir.Name}");
+                CopyAll(diSourceSubDir, nextTargetSubDir);
+            }
+        }
+        catch (Exception ex)
         {
-            DirectoryInfo nextTargetSubDir = target.CreateSubdirectory(diSourceSubDir.Name);
-            CopyAll(diSourceSubDir, nextTargetSubDir);
+            Console.WriteLine($"❌ Error during directory copy: {ex.Message}");
+            throw;
         }
     }
 
@@ -223,4 +386,11 @@ class Program
 
         return null;
     }
+    private static void WaitForUserExit()
+    {
+        Console.WriteLine("\nPress any key to exit...");
+        Console.ReadKey();
+    }
+
 }
+
