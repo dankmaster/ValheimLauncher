@@ -15,8 +15,11 @@ using Microsoft.Win32;
 
 class Program
 {
-    private const string GithubApiBaseUrl = "https://api.github.com/repos/dankmaster/vhserver";
-    private const string GithubRawBaseUrl = "https://github.com/dankmaster/vhserver/raw";
+    // Update these constants at the top of your Program class:
+    private const string GithubOwner = "dankmaster";
+    private const string GithubRepo = "ValheimLauncher";
+    private const string GithubApiBaseUrl = $"https://api.github.com/repos/{GithubOwner}/{GithubRepo}";
+    private const string GithubModsUrl = $"https://github.com/{GithubOwner}/{GithubRepo}/raw/master/Mods/plugins.zip";
     private static readonly string AppDataPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ValheimLauncher"
@@ -179,7 +182,7 @@ del ""%~f0""";
         try
         {
             Console.WriteLine("📥 Downloading mod information...");
-            await DownloadFileAsync($"{GithubRawBaseUrl}/main/plugins.zip", TempZipPath);
+            await DownloadFileAsync(GithubModsUrl, TempZipPath);
 
             if (Directory.Exists(ExtractedTempPath))
             {
@@ -236,7 +239,16 @@ del ""%~f0""";
 
     private static async Task DownloadFileAsync(string url, string destinationPath)
     {
-        using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.UserAgent.ParseAdd("ValheimLauncher"); // GitHub requires a user agent
+
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new Exception("Download file not found. Please check if the file exists in the repository.");
+        }
+
         response.EnsureSuccessStatusCode();
 
         var totalBytes = response.Content.Headers.ContentLength ?? -1L;
