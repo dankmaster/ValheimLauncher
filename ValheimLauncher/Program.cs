@@ -272,24 +272,28 @@ del ""%~f0""";
             Console.WriteLine($"{ConsoleSymbols.Error} Update aborted by user.");
             return;
         }
-
+    
         Console.WriteLine($"\n{ConsoleSymbols.Progress} Updating mods...");
         Console.WriteLine($"{ConsoleSymbols.Info} Removing old mods...");
-
-        foreach (var file in Directory.GetFiles(pluginsFolder, "*", SearchOption.AllDirectories))
+    
+        // Make file operations async
+        await Task.Run(() =>
         {
-            File.Delete(file);
-            Console.WriteLine($"{ConsoleSymbols.Arrow} Removed: {Path.GetFileName(file)}");
-        }
-
-        foreach (var dir in Directory.GetDirectories(pluginsFolder))
-        {
-            Directory.Delete(dir, true);
-            Console.WriteLine($"{ConsoleSymbols.Arrow} Removed directory: {Path.GetFileName(dir)}");
-        }
-
+            foreach (var file in Directory.GetFiles(pluginsFolder, "*", SearchOption.AllDirectories))
+            {
+                File.Delete(file);
+                Console.WriteLine($"{ConsoleSymbols.Arrow} Removed: {Path.GetFileName(file)}");
+            }
+    
+            foreach (var dir in Directory.GetDirectories(pluginsFolder))
+            {
+                Directory.Delete(dir, true);
+                Console.WriteLine($"{ConsoleSymbols.Arrow} Removed directory: {Path.GetFileName(dir)}");
+            }
+        });
+    
         Console.WriteLine($"\n{ConsoleSymbols.Info} Installing new mods...");
-        CopyAll(new DirectoryInfo(ExtractedTempPath), new DirectoryInfo(pluginsFolder));
+        await Task.Run(() => CopyAll(new DirectoryInfo(ExtractedTempPath), new DirectoryInfo(pluginsFolder)));
         Console.WriteLine($"{ConsoleSymbols.Success} Mods updated successfully!");
     }
 
@@ -405,24 +409,30 @@ del ""%~f0""";
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private static string? GetPluginsFolder()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException($"{ConsoleSymbols.Error} This application only supports Windows.");
+        }
+    
         string? steamPath = GetSteamPath();
         if (string.IsNullOrEmpty(steamPath))
         {
             Console.WriteLine($"{ConsoleSymbols.Error} Steam installation not found.");
             return null;
         }
-
+    
         string libraryFoldersPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(libraryFoldersPath))
         {
             Console.WriteLine($"{ConsoleSymbols.Error} libraryfolders.vdf not found. Cannot locate Valheim.");
             return null;
         }
-
+    
         string content = File.ReadAllText(libraryFoldersPath);
-
+    
         var matches = Regex.Matches(content, @"""path""\s*""([^""]+)""");
         foreach (Match match in matches)
         {
@@ -433,7 +443,7 @@ del ""%~f0""";
                 return pluginsPath;
             }
         }
-
+    
         return null;
     }
 
