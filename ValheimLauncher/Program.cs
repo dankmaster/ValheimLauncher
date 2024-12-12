@@ -164,10 +164,31 @@ class Program
 
         var scriptPath = Path.Combine(AppDataPath, "update.bat");
         var script = $@"@echo off
-timeout /t 2 /nobreak
-del ""{currentExe}""
+echo Waiting for launcher to close...
+timeout /t 3 /nobreak
+echo Starting update process...
+
+:retry_delete
+del ""{currentExe}"" 2>nul
+if exist ""{currentExe}"" (
+    echo Waiting for file to be free...
+    timeout /t 2 /nobreak
+    goto retry_delete
+)
+
+echo Extracting update...
 powershell Expand-Archive -Path ""{updatePath}"" -DestinationPath ""{Path.GetDirectoryName(currentExe)}"" -Force
+if errorlevel 1 (
+    echo Failed to extract update.
+    pause
+    exit /b 1
+)
+
+echo Cleaning up...
 del ""{updatePath}""
+
+echo Update complete! Starting launcher...
+timeout /t 2 /nobreak
 start """" ""{currentExe}""
 del ""%~f0""";
 
