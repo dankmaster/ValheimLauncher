@@ -83,7 +83,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.new_version }}
+          tag_name: ${{ env.new_version }} # Ensure the tag_name is correctly passed
           release_name: "Release ${{ env.new_version }}"
           draft: false
           prerelease: false
