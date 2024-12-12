@@ -160,11 +160,13 @@ class Program
     private static void CreateUpdateScript(string updatePath)
     {
         var currentExe = Process.GetCurrentProcess().MainModule?.FileName;
+        var currentPid = Process.GetCurrentProcess().Id;
         if (currentExe == null) return;
 
         var scriptPath = Path.Combine(AppDataPath, "update.bat");
         var script = $@"@echo off
 echo Waiting for launcher to close...
+taskkill /F /PID {currentPid} >nul 2>&1
 timeout /t 3 /nobreak
 echo Starting update process...
 
@@ -193,7 +195,12 @@ start """" ""{currentExe}""
 del ""%~f0""";
 
         File.WriteAllText(scriptPath, script);
-        Process.Start(new ProcessStartInfo(scriptPath) { UseShellExecute = true });
+        var startInfo = new ProcessStartInfo(scriptPath)
+        {
+            UseShellExecute = true,
+            Verb = "runas" // Run as administrator to ensure we can kill the process
+        };
+        Process.Start(startInfo);
     }
 
     private static bool IsNewerVersion(string latestVersion, string currentVersion)
