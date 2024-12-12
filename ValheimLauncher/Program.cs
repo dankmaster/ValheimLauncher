@@ -103,16 +103,26 @@ class Program
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ValheimLauncher");
             var response = await httpClient.GetAsync($"{GithubApiBaseUrl}/releases/latest");
 
-            if (!response.IsSuccessStatusCode) return false;
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("⚠️ Could not check for updates. Will continue with current version.");
+                return false;
+            }
 
             var releaseJson = await response.Content.ReadAsStringAsync();
             var releaseInfo = JsonSerializer.Deserialize<JsonElement>(releaseJson);
-            var latestVersion = releaseInfo.GetProperty("tag_name").GetString();
-            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
+            var latestVersion = releaseInfo.GetProperty("tag_name").GetString()?.TrimStart('v');
 
-            if (latestVersion != null && IsNewerVersion(latestVersion, currentVersion))
+            // Get current version and remove 'v' prefix if present for comparison
+            var currentVersion = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
+
+            Console.WriteLine($"Current version: {currentVersion}");
+            Console.WriteLine($"Latest version: {latestVersion}");
+
+            if (latestVersion != null && IsNewerVersion($"v{latestVersion}", currentVersion))
             {
-                Console.WriteLine($"🔄 New launcher version available: {latestVersion}");
+                Console.WriteLine($"🔄 New launcher version available: v{latestVersion}");
                 Console.WriteLine("Starting update process...");
 
                 // Download and prepare the update
@@ -126,6 +136,10 @@ class Program
                     CreateUpdateScript(updatePath);
                     return true;
                 }
+            }
+            else
+            {
+                Console.WriteLine("✅ Launcher is up to date!");
             }
         }
         catch (Exception ex)
