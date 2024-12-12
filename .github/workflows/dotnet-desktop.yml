@@ -20,11 +20,15 @@ jobs:
 
       - name: Get Latest Tag
         id: get_latest_tag
+        shell: pwsh
         run: |
-          # Get the latest tag
-          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $latest_tag"
-          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+          # Get the latest tag or use a default if no tag exists
+          $latestTag = git describe --tags --abbrev=0 2>$null
+          if (-not $latestTag) {
+          $latestTag = "v0.0.0"
+          }
+          Write-Output "Latest tag: $latestTag"
+          echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
 
       - name: Calculate New Version
         id: calculate_version
