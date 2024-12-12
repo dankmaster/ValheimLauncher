@@ -1,13 +1,13 @@
-name: Manual Release
+name: Manual Release with Automatic Versioning
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag for the release (e.g. v1.0.0)"
-        required: true
-        default: "v1.0.0"
-        
+        description: "Optional: Version tag for the release (e.g., v1.0.0). Leave blank for automatic increment."
+        required: false
+        default: ""
+
 permissions:
   contents: write
 
@@ -17,11 +17,47 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history and tags
+
+      - name: Get Latest Tag
+        id: get_latest_tag
+        shell: pwsh
+        run: |
+          # Get the latest tag or use a default if no tag exists
+          $latestTag = git describe --tags --abbrev=0 2>$null
+          if (-not $latestTag) {
+            $latestTag = "v0.0.0"
+          }
+          Write-Output "Latest tag: $latestTag"
+          echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
+
+      - name: Calculate New Version
+        id: calculate_version
+        shell: pwsh
+        run: |
+          $latestTag = "${{ env.latest_tag }}"
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            # Use manual version if provided
+            $newVersion = "${{ github.event.inputs.version }}"
+          } else {
+            # Parse latest tag and increment patch version
+            $parts = $latestTag -replace "v", "" -split "\."
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+            $patch = [int]$parts[2] + 1
+            $newVersion = "v$major.$minor.$patch"
+          }
+          Write-Output "New version: $newVersion"
+          echo "new_version=$newVersion" >> $env:GITHUB_ENV
+
+      - name: Display New Version
+        run: echo "Releasing version ${{ env.new_version }}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '6.0.x' # Adjust as needed
+          dotnet-version: '6.0.x'
 
       - name: Restore Dependencies
         run: dotnet restore ./ValheimLauncher/ValheimLauncher.csproj
@@ -33,22 +69,21 @@ jobs:
         run: dotnet publish ./ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -o ./publish
 
       - name: Archive Build Artifacts
-        shell: pwsh
-        run: Compress-Archive -Path "publish/*" -DestinationPath "ValheimLauncher.zip"
+        run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
       - name: Create GitHub Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/create-release@v1.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          release_name: "Release ${{ github.event.inputs.version }}"
+          tag_name: ${{ env.new_version }}
+          release_name: "Release ${{ env.new_version }}"
           draft: false
           prerelease: false
 
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -56,3 +91,9 @@ jobs:
           asset_path: './ValheimLauncher.zip'
           asset_name: 'ValheimLauncher.zip'
           asset_content_type: 'application/zip'
+
+      - name: Push New Tag
+        shell: pwsh
+        run: |
+          git tag ${{ env.new_version }}
+          git push origin ${{ env.new_version }}
