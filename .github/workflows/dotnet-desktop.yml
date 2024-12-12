@@ -81,7 +81,6 @@ jobs:
         id: create_release
         uses: actions/create-release@v1.1.4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.new_version }}
           release_name: "Release ${{ env.new_version }}"
           draft: false
