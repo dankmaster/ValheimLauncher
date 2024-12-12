@@ -4,9 +4,11 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
+using System.Net.Http;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 
 class Program
@@ -18,13 +20,13 @@ class Program
     private static string ExtractedTempPath = Path.Combine(TempFolderPath, "mods_extracted");
     private static string SteamAppID = "892970"; // Valheim Steam AppID
 
-    static void Main()
+    static async Task Main()
     {
         try
         {
             Directory.CreateDirectory(TempFolderPath);
 
-            string pluginsFolder = GetPluginsFolder();
+            string? pluginsFolder = GetPluginsFolder();
             if (string.IsNullOrEmpty(pluginsFolder))
             {
                 Console.WriteLine("Valheim installation not found. Exiting.");
@@ -32,7 +34,7 @@ class Program
             }
 
             // Check if update is needed
-            if (TestUpdateNeeded(pluginsFolder))
+            if (await TestUpdateNeeded(pluginsFolder))
             {
                 UpdateMods(pluginsFolder);
             }
@@ -45,6 +47,19 @@ class Program
         catch (Exception ex)
         {
             Console.WriteLine("An error occurred: " + ex.Message);
+        }
+    }
+
+    private static async Task DownloadFileAsync(string url, string destinationPath)
+    {
+        using (HttpClient client = new HttpClient())
+        using (HttpResponseMessage response = await client.GetAsync(url))
+        using (Stream stream = await response.Content.ReadAsStreamAsync())
+        {
+            using (FileStream fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await stream.CopyToAsync(fileStream);
+            }
         }
     }
 
@@ -61,13 +76,10 @@ class Program
         }
     }
 
-    private static bool TestUpdateNeeded(string pluginsFolder)
+    private static async Task<bool> TestUpdateNeeded(string pluginsFolder)
     {
         Console.WriteLine("Downloading mods for checksum verification...");
-        using (WebClient wc = new WebClient())
-        {
-            wc.DownloadFile(GithubZipUrl, TempZipPath);
-        }
+        await DownloadFileAsync(GithubZipUrl, TempZipPath);
 
         if (Directory.Exists(ExtractedTempPath))
         {
@@ -89,18 +101,6 @@ class Program
             Console.WriteLine("File: " + file);
         }
 
-        // The extracted structure may be something like "vhserver-main/..." 
-        // Adjust if needed. Assuming the root folder inside zip is "vhserver-main".
-        // If the actual mods are one folder deeper, adjust accordingly.
-
-        string extractedMainDir = Directory.GetDirectories(ExtractedTempPath).FirstOrDefault();
-        if (extractedMainDir == null)
-        {
-            Console.WriteLine("No extracted directory found in the ZIP.");
-            return false;
-        }
-
-        // We now consider ExtractedTempPath as the root of all extracted mods.
         string remoteChecksum = CalculateFolderChecksum(ExtractedTempPath);
         string localChecksum = CalculateFolderChecksum(pluginsFolder);
 
@@ -135,7 +135,7 @@ class Program
             Directory.Delete(dir, true);
         }
 
-        string extractedMainDir = Directory.GetDirectories(ExtractedTempPath).FirstOrDefault();
+        string? extractedMainDir = Directory.GetDirectories(ExtractedTempPath).FirstOrDefault();
         if (extractedMainDir == null)
         {
             Console.WriteLine("No extracted directory found. Cannot update.");
@@ -165,8 +165,7 @@ class Program
         // Copy each subdirectory
         foreach (DirectoryInfo diSourceSubDir in source.GetDirectories())
         {
-            DirectoryInfo nextTargetSubDir =
-                target.CreateSubdirectory(diSourceSubDir.Name);
+            DirectoryInfo nextTargetSubDir = target.CreateSubdirectory(diSourceSubDir.Name);
             CopyAll(diSourceSubDir, nextTargetSubDir);
         }
     }
@@ -197,10 +196,10 @@ class Program
         }
     }
 
-    private static string GetPluginsFolder()
+    private static string? GetPluginsFolder()
     {
-        string steamPath = GetSteamPath();
-        if (string.IsNullOrEmpty(steamPath))
+        string? steamPath = GetSteamPath();
+        if (steamPath == null)
         {
             Console.WriteLine("Steam installation not found.");
             return null;
@@ -232,9 +231,9 @@ class Program
         return null;
     }
 
-    private static string GetSteamPath()
+    [SupportedOSPlatform("windows")]
+    private static string? GetSteamPath()
     {
-        // Check registry keys
         string[] registryPaths = {
             @"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam",
             @"HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Valve\Steam",
@@ -245,7 +244,7 @@ class Program
         {
             try
             {
-                var installPath = Registry.GetValue(regPath, "InstallPath", null) as string;
+                string? installPath = Registry.GetValue(regPath, "InstallPath", null) as string;
                 if (!string.IsNullOrEmpty(installPath) && Directory.Exists(installPath))
                 {
                     return installPath;
