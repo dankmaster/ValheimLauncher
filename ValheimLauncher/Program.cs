@@ -15,11 +15,21 @@ using Microsoft.Win32;
 
 class Program
 {
-    // Update these constants at the top of your Program class:
+    private static class ConsoleSymbols
+    {
+        public const string Success = "[+]";
+        public const string Error = "[!]";
+        public const string Info = "[*]";
+        public const string Warning = "[!]";
+        public const string Arrow = "=>";
+        public const string Progress = "[-]";
+    }
+
     private const string GithubOwner = "dankmaster";
     private const string GithubRepo = "ValheimLauncher";
+    private const string GithubBranch = "master";
     private const string GithubApiBaseUrl = $"https://api.github.com/repos/{GithubOwner}/{GithubRepo}";
-    private const string GithubModsUrl = $"https://github.com/{GithubOwner}/{GithubRepo}/raw/master/Mods/plugins.zip";
+    private const string GithubModsUrl = $"https://github.com/{GithubOwner}/{GithubRepo}/raw/{GithubBranch}/Mods/plugins.zip";
     private static readonly string AppDataPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ValheimLauncher"
@@ -45,7 +55,7 @@ class Program
             // Check for launcher updates first
             if (await CheckForLauncherUpdate())
             {
-                Console.WriteLine("Press any key to exit and install the update...");
+                Console.WriteLine($"{ConsoleSymbols.Info} Press any key to exit and install the update...");
                 Console.ReadKey();
                 return;
             }
@@ -54,34 +64,34 @@ class Program
             string? pluginsFolder = GetPluginsFolder();
             if (string.IsNullOrEmpty(pluginsFolder))
             {
-                Console.WriteLine("❌ Valheim installation not found.");
+                Console.WriteLine($"{ConsoleSymbols.Error} Valheim installation not found.");
                 WaitForUserExit();
                 return;
             }
 
-            Console.WriteLine($"✅ Found Valheim plugins folder: {pluginsFolder}");
+            Console.WriteLine($"{ConsoleSymbols.Success} Found Valheim plugins folder: {pluginsFolder}");
 
             // Check for mod updates
-            Console.WriteLine("\nChecking for mod updates...");
+            Console.WriteLine($"\n{ConsoleSymbols.Info} Checking for mod updates...");
             if (await TestUpdateNeeded(pluginsFolder))
             {
-                Console.WriteLine("🔄 Mod updates available!");
+                Console.WriteLine($"{ConsoleSymbols.Progress} Mod updates available!");
                 await UpdateMods(pluginsFolder);
             }
             else
             {
-                Console.WriteLine("✅ Mods are up to date!");
+                Console.WriteLine($"{ConsoleSymbols.Success} Mods are up to date!");
             }
 
             // Launch game
-            Console.WriteLine("\n🎮 Launching Valheim...");
+            Console.WriteLine($"\n{ConsoleSymbols.Progress} Launching Valheim...");
             Process.Start(new ProcessStartInfo($"steam://rungameid/{SteamAppID}") { UseShellExecute = true });
 
             WaitForUserExit();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"\n❌ An error occurred: {ex.Message}");
+            Console.WriteLine($"\n{ConsoleSymbols.Error} An error occurred: {ex.Message}");
             Console.WriteLine("\nStack trace:");
             Console.WriteLine(ex.StackTrace);
             WaitForUserExit();
@@ -95,7 +105,7 @@ class Program
     private static void DisplayWelcomeMessage()
     {
         Console.WriteLine("=================================");
-        Console.WriteLine("   Valheim Mod Launcher v" + Assembly.GetExecutingAssembly().GetName().Version);
+        Console.WriteLine($"{ConsoleSymbols.Info} Valheim Mod Launcher v" + Assembly.GetExecutingAssembly().GetName().Version);
         Console.WriteLine("=================================\n");
     }
 
@@ -108,46 +118,41 @@ class Program
 
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine("⚠️ Could not check for updates. Will continue with current version.");
+                Console.WriteLine($"{ConsoleSymbols.Warning} Could not check for updates. Will continue with current version.");
                 return false;
             }
 
             var releaseJson = await response.Content.ReadAsStringAsync();
             var releaseInfo = JsonSerializer.Deserialize<JsonElement>(releaseJson);
             var latestVersion = releaseInfo.GetProperty("tag_name").GetString()?.TrimStart('v');
-
-            // Get current version and remove 'v' prefix if present for comparison
             var currentVersion = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
 
-            Console.WriteLine($"Current version: {currentVersion}");
-            Console.WriteLine($"Latest version: {latestVersion}");
+            Console.WriteLine($"{ConsoleSymbols.Info} Current version: {currentVersion}");
+            Console.WriteLine($"{ConsoleSymbols.Info} Latest version: {latestVersion}");
 
             if (latestVersion != null && IsNewerVersion($"v{latestVersion}", currentVersion))
             {
-                Console.WriteLine($"🔄 New launcher version available: v{latestVersion}");
-                Console.WriteLine("Starting update process...");
+                Console.WriteLine($"{ConsoleSymbols.Progress} New launcher version available: v{latestVersion}");
+                Console.WriteLine($"{ConsoleSymbols.Info} Starting update process...");
 
-                // Download and prepare the update
                 var assetUrl = releaseInfo.GetProperty("assets")[0].GetProperty("browser_download_url").GetString();
                 if (assetUrl != null)
                 {
                     var updatePath = Path.Combine(AppDataPath, "update.zip");
                     await DownloadFileAsync(assetUrl, updatePath);
-
-                    // Create update batch script
                     CreateUpdateScript(updatePath);
                     return true;
                 }
             }
             else
             {
-                Console.WriteLine("✅ Launcher is up to date!");
+                Console.WriteLine($"{ConsoleSymbols.Success} Launcher is up to date!");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠️ Failed to check for updates: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Error} Failed to check for updates: {ex.Message}");
         }
         return false;
     }
@@ -181,7 +186,7 @@ del ""%~f0""";
     {
         try
         {
-            Console.WriteLine("📥 Downloading mod information...");
+            Console.WriteLine($"{ConsoleSymbols.Progress} Downloading mod information...");
             await DownloadFileAsync(GithubModsUrl, TempZipPath);
 
             if (Directory.Exists(ExtractedTempPath))
@@ -198,49 +203,45 @@ del ""%~f0""";
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠️ Error checking for updates: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Error} Error checking for updates: {ex.Message}");
             return false;
         }
     }
 
     private static async Task UpdateMods(string pluginsFolder)
     {
-        Console.Write($"\n⚠️ Do you want to update mods in {pluginsFolder}? (Yes/No): ");
+        Console.Write($"\n{ConsoleSymbols.Warning} Do you want to update mods in {pluginsFolder}? (Yes/No): ");
         string? response = Console.ReadLine();
         if (string.IsNullOrEmpty(response) || !response.Equals("Yes", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("❌ Update aborted by user.");
+            Console.WriteLine($"{ConsoleSymbols.Error} Update aborted by user.");
             return;
         }
 
-        Console.WriteLine("\n🔄 Updating mods...");
-        Console.WriteLine("Removing old mods...");
+        Console.WriteLine($"\n{ConsoleSymbols.Progress} Updating mods...");
+        Console.WriteLine($"{ConsoleSymbols.Info} Removing old mods...");
 
-        // Delete old files
         foreach (var file in Directory.GetFiles(pluginsFolder, "*", SearchOption.AllDirectories))
         {
             File.Delete(file);
-            Console.WriteLine($"Removed: {Path.GetFileName(file)}");
+            Console.WriteLine($"{ConsoleSymbols.Arrow} Removed: {Path.GetFileName(file)}");
         }
 
         foreach (var dir in Directory.GetDirectories(pluginsFolder))
         {
             Directory.Delete(dir, true);
-            Console.WriteLine($"Removed directory: {Path.GetFileName(dir)}");
+            Console.WriteLine($"{ConsoleSymbols.Arrow} Removed directory: {Path.GetFileName(dir)}");
         }
 
-        Console.WriteLine("\nInstalling new mods...");
-
-        // Copy new files
+        Console.WriteLine($"\n{ConsoleSymbols.Info} Installing new mods...");
         CopyAll(new DirectoryInfo(ExtractedTempPath), new DirectoryInfo(pluginsFolder));
-
-        Console.WriteLine("✅ Mods updated successfully!");
+        Console.WriteLine($"{ConsoleSymbols.Success} Mods updated successfully!");
     }
 
     private static async Task DownloadFileAsync(string url, string destinationPath)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.UserAgent.ParseAdd("ValheimLauncher"); // GitHub requires a user agent
+        request.Headers.UserAgent.ParseAdd("ValheimLauncher");
 
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
@@ -267,7 +268,7 @@ del ""%~f0""";
             if (totalBytes != -1)
             {
                 var percentage = (int)((totalBytesRead * 100) / totalBytes);
-                Console.Write($"\rDownload progress: {percentage}%");
+                Console.Write($"\r{ConsoleSymbols.Progress} Download progress: {percentage}%");
             }
         }
         Console.WriteLine();
@@ -289,7 +290,7 @@ del ""%~f0""";
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠️ Cleanup error: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Warning} Cleanup error: {ex.Message}");
         }
     }
 
@@ -308,24 +309,24 @@ del ""%~f0""";
                 {
                     string destinationPath = Path.Combine(target.FullName, fi.Name);
                     fi.CopyTo(destinationPath, true);
-                    Console.WriteLine($"Installed: {fi.Name}");
+                    Console.WriteLine($"{ConsoleSymbols.Arrow} Installed: {fi.Name}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"⚠️ Failed to copy {fi.Name}: {ex.Message}");
+                    Console.WriteLine($"{ConsoleSymbols.Warning} Failed to copy {fi.Name}: {ex.Message}");
                 }
             }
 
             foreach (DirectoryInfo diSourceSubDir in source.GetDirectories())
             {
                 DirectoryInfo nextTargetSubDir = target.CreateSubdirectory(diSourceSubDir.Name);
-                Console.WriteLine($"Created directory: {diSourceSubDir.Name}");
+                Console.WriteLine($"{ConsoleSymbols.Arrow} Created directory: {diSourceSubDir.Name}");
                 CopyAll(diSourceSubDir, nextTargetSubDir);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"❌ Error during directory copy: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Error} Error during directory copy: {ex.Message}");
             throw;
         }
     }
@@ -348,19 +349,20 @@ del ""%~f0""";
             return BitConverter.ToString(finalHash).Replace("-", "");
         }
     }
+
     private static string? GetPluginsFolder()
     {
         string? steamPath = GetSteamPath();
         if (string.IsNullOrEmpty(steamPath))
         {
-            Console.WriteLine("Steam installation not found.");
+            Console.WriteLine($"{ConsoleSymbols.Error} Steam installation not found.");
             return null;
         }
 
         string libraryFoldersPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(libraryFoldersPath))
         {
-            Console.WriteLine("libraryfolders.vdf not found. Cannot locate Valheim.");
+            Console.WriteLine($"{ConsoleSymbols.Error} libraryfolders.vdf not found. Cannot locate Valheim.");
             return null;
         }
 
@@ -380,7 +382,7 @@ del ""%~f0""";
         return null;
     }
 
-        [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("windows")]
     private static string? GetSteamPath()
     {
         if (!OperatingSystem.IsWindows())
@@ -389,10 +391,10 @@ del ""%~f0""";
         }
 
         string[] registryPaths = {
-            @"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam",
-            @"HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Valve\Steam",
-            @"HKEY_CURRENT_USER\SOFTWARE\Valve\Steam"
-        };
+        @"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam",
+        @"HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Valve\Steam",
+        @"HKEY_CURRENT_USER\SOFTWARE\Valve\Steam"
+    };
 
         foreach (string regPath in registryPaths)
         {
@@ -412,11 +414,11 @@ del ""%~f0""";
 
         return null;
     }
+
     private static void WaitForUserExit()
     {
-        Console.WriteLine("\nPress any key to exit...");
+        Console.WriteLine($"\n{ConsoleSymbols.Info} Press any key to exit...");
         Console.ReadKey();
     }
 
 }
-
