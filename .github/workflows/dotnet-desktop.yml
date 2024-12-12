@@ -1,121 +1,106 @@
-name: Manual Release with Automatic Versioning
+name: Build and Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Optional: Version tag for the release (e.g., v1.0.0). Leave blank for automatic increment."
+        description: "Version number (leave empty for auto-increment)"
         required: false
         default: ""
-
-permissions:
-  contents: write
-  packages: read
+      version_type:
+        description: "Version increment type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
   build-and-release:
     runs-on: windows-latest
+    
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all history and tags
-
-      - name: Get Latest Tag
-        id: get_latest_tag
-        shell: pwsh
-        run: |
-          # Check if there are any tags in the repository
-          $tagsExist = git tag | Measure-Object | Select-Object -ExpandProperty Count
-          if ($tagsExist -eq 0) {
-            $latestTag = "v0.0.0"
-          } else {
-            $latestTag = git describe --tags --abbrev=0 2>$null
-          }
-          Write-Output "Latest tag: $latestTag"
-          "latest_tag=$latestTag" >> $env:GITHUB_OUTPUT
-
-      - name: Validate Version Format
-        if: github.event.inputs.version != ''
-        shell: pwsh
-        run: |
-          if ("${{ github.event.inputs.version }}" -notmatch '^v\d+\.\d+\.\d+$') {
-            Write-Error "Invalid version format. Must be in format 'vX.Y.Z'"
-            exit 1
-          }
-
-      - name: Calculate New Version
-        id: calculate_version
-        shell: pwsh
-        run: |
-          $latestTag = "${{ steps.get_latest_tag.outputs.latest_tag }}"
-          Write-Output "Debug: latestTag=$latestTag"
-          if ("${{ github.event.inputs.version }}" -ne "") {
-            $newVersion = "${{ github.event.inputs.version }}"
-          } else {
-            if ($latestTag -eq "v0.0.0") {
-              $newVersion = "v1.0.0"
-            } else {
-              $parts = $latestTag -replace "v", "" -split "\."
-              $major = [int]$parts[0]
-              $minor = [int]$parts[1]
-              $patch = [int]$parts[2] + 1
-              $newVersion = "v$major.$minor.$patch"
-            }
-          }
-          Write-Output "Debug: Calculated newVersion=$newVersion"
-          "new_version=$newVersion" >> $env:GITHUB_OUTPUT
-
-      - name: Generate Changelog
-        id: changelog
-        shell: pwsh
-        run: |
-          $previousTag = git describe --tags --abbrev=0 HEAD^ 2>$null
-          if ($?) {
-            $changelog = git log --pretty=format:"* %s" "$previousTag..HEAD"
-          } else {
-            $changelog = git log --pretty=format:"* %s"
-          }
-          "changelog<<EOF" >> $env:GITHUB_OUTPUT
-          $changelog >> $env:GITHUB_OUTPUT
-          "EOF" >> $env:GITHUB_OUTPUT
-
+          fetch-depth: 0
+      
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '6.0.x'
 
-      - name: Restore Dependencies
-        run: dotnet restore ./ValheimLauncher/ValheimLauncher.csproj
+      - name: Get Previous Version
+        id: get_previous_version
+        shell: pwsh
+        run: |
+          $version = "1.0.0"
+          $tags = git tag -l "v*"
+          if ($tags) {
+              $version = ($tags | Sort-Object -Descending)[0].TrimStart('v')
+          }
+          echo "PREV_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Build Project
-        run: dotnet build --configuration Release ./ValheimLauncher/ValheimLauncher.csproj
+      - name: Calculate New Version
+        id: calc_version
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrEmpty($version)) {
+              $prevVersion = "${{ env.PREV_VERSION }}"
+              $major, $minor, $patch = $prevVersion.Split('.')
+              
+              switch ("${{ github.event.inputs.version_type }}") {
+                  "major" { $version = "$([int]$major + 1).0.0" }
+                  "minor" { $version = "$major.$([int]$minor + 1).0" }
+                  "patch" { $version = "$major.$minor.$([int]$patch + 1)" }
+              }
+          }
+          echo "NEW_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+      - name: Update Project Version
+        shell: pwsh
+        run: |
+          $version = "${{ env.NEW_VERSION }}"
+          $projFile = "ValheimLauncher/ValheimLauncher.csproj"
+          $xml = [xml](Get-Content $projFile)
+          $propertyGroup = $xml.Project.PropertyGroup
+          
+          if (-not $propertyGroup.Version) {
+              $versionElement = $xml.CreateElement("Version")
+              $propertyGroup.AppendChild($versionElement)
+          }
+          $propertyGroup.Version = $version
+          
+          if (-not $propertyGroup.FileVersion) {
+              $fileVersionElement = $xml.CreateElement("FileVersion")
+              $propertyGroup.AppendChild($fileVersionElement)
+          }
+          $propertyGroup.FileVersion = $version
+          
+          if (-not $propertyGroup.AssemblyVersion) {
+              $assemblyVersionElement = $xml.CreateElement("AssemblyVersion")
+              $propertyGroup.AppendChild($assemblyVersionElement)
+          }
+          $propertyGroup.AssemblyVersion = $version
+          
+          $xml.Save($projFile)
+          
+      - name: Build
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+          dotnet publish ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
 
-      - name: Publish Project
-        run: dotnet publish ./ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -o ./publish
-
-      - name: Archive Build Artifacts
+      - name: Create Release Archive
         run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
-      - name: Create Release and Upload Asset
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.calculate_version.outputs.new_version }}
-          name: "Release ${{ steps.calculate_version.outputs.new_version }}"
-          body: ${{ steps.changelog.outputs.changelog }}
+          tag_name: v${{ env.NEW_VERSION }}
+          name: Release v${{ env.NEW_VERSION }}
           files: ValheimLauncher.zip
           draft: false
           prerelease: false
-
-      - name: Push New Tag
-        shell: pwsh
-        run: |
-          try {
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
-            git tag ${{ steps.calculate_version.outputs.new_version }}
-            git push origin ${{ steps.calculate_version.outputs.new_version }}
-          } catch {
-            Write-Error "Failed to create and push tag: $_"
-            exit 1
-          }
