@@ -39,6 +39,7 @@ jobs:
         shell: pwsh
         run: |
           $latestTag = "${{ env.latest_tag }}"
+          Write-Output "Debug: latestTag=$latestTag"
           if ("${{ github.event.inputs.version }}" -ne "") {
             # Use manual version if provided
             $newVersion = "${{ github.event.inputs.version }}"
@@ -54,8 +55,15 @@ jobs:
               $newVersion = "v$major.$minor.$patch"
             }
           }
-          Write-Output "New version: $newVersion"
+          Write-Output "Debug: Calculated newVersion=$newVersion"
           echo "new_version=$newVersion" >> $GITHUB_ENV
+          
+      - name: Debug Environment After Version Calculation
+        run: |
+          echo "Debugging environment variables"
+          echo "latest_tag=${{ env.latest_tag }}"
+          echo "new_version=${{ env.new_version }}"
+
 
       - name: Display New Version
         run: |
