@@ -12,6 +12,21 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Reflection;
 using Microsoft.Win32;
+using System.Text.Json.Serialization;
+
+[JsonSerializable(typeof(ReleaseInfo))]
+internal partial class ReleaseContext : JsonSerializerContext { }
+
+internal class ReleaseInfo
+{
+    public string? TagName { get; set; }
+    public Asset[] Assets { get; set; } = Array.Empty<Asset>();
+}
+
+internal class Asset
+{
+    public string? BrowserDownloadUrl { get; set; }
+}
 
 class Program
 {
@@ -123,20 +138,32 @@ class Program
             }
 
             var releaseJson = await response.Content.ReadAsStringAsync();
-            var releaseInfo = JsonSerializer.Deserialize<JsonElement>(releaseJson);
-            var latestVersion = releaseInfo.GetProperty("tag_name").GetString()?.TrimStart('v');
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            var releaseInfo = JsonSerializer.Deserialize<ReleaseInfo>(releaseJson, options);
+
+            if (releaseInfo?.TagName == null)
+            {
+                Console.WriteLine($"{ConsoleSymbols.Error} Invalid release information received.");
+                return false;
+            }
+
+            var latestVersion = releaseInfo.TagName.TrimStart('v');
             var currentVersion = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
 
             Console.WriteLine($"{ConsoleSymbols.Info} Current version: {currentVersion}");
             Console.WriteLine($"{ConsoleSymbols.Info} Latest version: {latestVersion}");
 
-            if (latestVersion != null && IsNewerVersion($"v{latestVersion}", currentVersion))
+            if (IsNewerVersion($"v{latestVersion}", currentVersion))
             {
                 Console.WriteLine($"{ConsoleSymbols.Progress} New launcher version available: v{latestVersion}");
                 Console.WriteLine($"{ConsoleSymbols.Info} Starting update process...");
 
-                var assetUrl = releaseInfo.GetProperty("assets")[0].GetProperty("browser_download_url").GetString();
+                var assetUrl = releaseInfo.Assets.FirstOrDefault()?.BrowserDownloadUrl;
                 if (assetUrl != null)
                 {
                     var updatePath = Path.Combine(AppDataPath, "update.zip");

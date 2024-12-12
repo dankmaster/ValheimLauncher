@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-	<TargetFramework>net6.0</TargetFramework>
-	<PublishSingleFile>true</PublishSingleFile>
-	<PublishTrimmed>true</PublishTrimmed>
-	<RuntimeIdentifier>win10-x64</RuntimeIdentifier>
-	<SelfContained>true</SelfContained>
-	  <Version>1.0.2</Version>
-	  <!-- This should match your GitHub release version -->
-	  <FileVersion>1.0.2</FileVersion>
-	  <AssemblyVersion>1.0.2</AssemblyVersion>
-  </PropertyGroup>
+	<Project Sdk="Microsoft.NET.Sdk">
+		<Project Sdk="Microsoft.NET.Sdk">
+			<PropertyGroup>
+				<OutputType>Exe</OutputType>
+				<TargetFramework>net6.0</TargetFramework>
+				<ImplicitUsings>enable</ImplicitUsings>
+				<Nullable>enable</Nullable>
+				<RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+				<PublishSingleFile>true</PublishSingleFile>
+				<SelfContained>true</SelfContained>
+				<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+			</PropertyGroup>
+		</Project>
+	</Project>
 
 </Project>
