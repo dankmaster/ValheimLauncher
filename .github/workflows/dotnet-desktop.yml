@@ -58,7 +58,9 @@ jobs:
           echo "new_version=$newVersion" >> $GITHUB_ENV
 
       - name: Display New Version
-        run: echo "Releasing version ${{ env.new_version }}"
+        run: |
+          echo "Releasing version ${{ env.new_version }}"
+          echo "Debug: env.new_version = ${{ env.new_version }}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -77,13 +79,19 @@ jobs:
       - name: Archive Build Artifacts
         run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
+      - name: Debug Environment
+        run: |
+          echo "Debugging Environment Variables"
+          echo "latest_tag=${{ env.latest_tag }}"
+          echo "new_version=${{ env.new_version }}"
+
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.new_version }} # Ensure the tag_name is correctly passed
+          tag_name: ${{ env.new_version }}
           release_name: "Release ${{ env.new_version }}"
           draft: false
           prerelease: false
