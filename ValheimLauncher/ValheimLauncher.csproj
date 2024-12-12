@@ -8,7 +8,11 @@
 	<PublishSingleFile>true</PublishSingleFile>
 	<PublishTrimmed>true</PublishTrimmed>
 	<RuntimeIdentifier>win10-x64</RuntimeIdentifier>
-	<SelfContained>true</SelfContained>  
+	<SelfContained>true</SelfContained>
+	  <Version>1.0.2</Version>
+	  <!-- This should match your GitHub release version -->
+	  <FileVersion>1.0.2</FileVersion>
+	  <AssemblyVersion>1.0.2</AssemblyVersion>
   </PropertyGroup>
 
 </Project>
