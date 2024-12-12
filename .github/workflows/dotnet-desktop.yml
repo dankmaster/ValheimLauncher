@@ -17,6 +17,11 @@ on:
           - minor
           - major
 
+permissions:
+  contents: write
+  discussions: write
+  packages: write
+
 jobs:
   build-and-release:
     runs-on: windows-latest
@@ -93,14 +98,36 @@ jobs:
           dotnet build --configuration Release --no-restore
           dotnet publish ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
 
+      - name: Verify Build Output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "./publish")) {
+              Write-Error "Build output directory not found!"
+              exit 1
+          }
+          Write-Host "Contents of publish directory:"
+          Get-ChildItem "./publish" -Recurse
+
       - name: Create Release Archive
-        run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
+        shell: pwsh
+        run: |
+          Write-Host "Creating release archive..."
+          Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip" -Force
+          if (-not (Test-Path "ValheimLauncher.zip")) {
+              Write-Error "Failed to create release archive!"
+              exit 1
+          }
+          Write-Host "Release archive created successfully"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v${{ env.NEW_VERSION }}
           name: Release v${{ env.NEW_VERSION }}
           files: ValheimLauncher.zip
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
+          generate_release_notes: true
