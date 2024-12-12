@@ -30,7 +30,7 @@ jobs:
             $latestTag = "v0.0.0"
           }
           Write-Output "Latest tag: $latestTag"
-          echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
+          echo "latest_tag=$latestTag" >> $GITHUB_ENV
 
       - name: Calculate New Version
         id: calculate_version
@@ -49,7 +49,7 @@ jobs:
             $newVersion = "v$major.$minor.$patch"
           }
           Write-Output "New version: $newVersion"
-          echo "new_version=$newVersion" >> $env:GITHUB_ENV
+          echo "new_version=$newVersion" >> $GITHUB_ENV
 
       - name: Display New Version
         run: echo "Releasing version ${{ env.new_version }}"
@@ -74,9 +74,8 @@ jobs:
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1.1.4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.new_version }}
           release_name: "Release ${{ env.new_version }}"
           draft: false
@@ -84,8 +83,6 @@ jobs:
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: './ValheimLauncher.zip'
