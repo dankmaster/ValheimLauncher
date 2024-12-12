@@ -70,14 +70,15 @@ jobs:
 
       - name: Archive Build Artifacts
         run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
-
+      
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.new_version }}
-          release_name: "Release ${{ env.new_version }}"
+          release_name: "ValheimLauncher ${{ env.new_version }}"
           draft: false
           prerelease: false
 
