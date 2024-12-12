@@ -410,7 +410,6 @@ del ""%~f0""";
         }
     }
 
-    [SupportedOSPlatform("windows")]
     private static string? GetPluginsFolder()
     {
         if (!OperatingSystem.IsWindows())
@@ -448,7 +447,6 @@ del ""%~f0""";
         return null;
     }
 
-    [SupportedOSPlatform("windows")]
     private static string? GetSteamPath()
     {
         if (!OperatingSystem.IsWindows())
