@@ -1,7 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-	<Project Sdk="Microsoft.NET.Sdk">
-		<Project Sdk="Microsoft.NET.Sdk">
+﻿	<Project Sdk="Microsoft.NET.Sdk">
 			<PropertyGroup>
 				<OutputType>Exe</OutputType>
 				<TargetFramework>net6.0</TargetFramework>
@@ -13,6 +10,4 @@
 				<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
 			</PropertyGroup>
 		</Project>
-	</Project>
 
-</Project>
