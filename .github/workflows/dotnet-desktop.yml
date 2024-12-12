@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history and tags
+
 
       - name: Get Latest Tag
         id: get_latest_tag
