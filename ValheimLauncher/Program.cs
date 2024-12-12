@@ -28,6 +28,7 @@ internal class Asset
     public string? BrowserDownloadUrl { get; set; }
 }
 
+[SupportedOSPlatform("windows")]
 class Program
 {
     private static class ConsoleSymbols
