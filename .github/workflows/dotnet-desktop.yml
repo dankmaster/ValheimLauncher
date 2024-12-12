@@ -1,0 +1,58 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag for the release (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+        
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x' # Adjust as needed
+
+      - name: Restore Dependencies
+        run: dotnet restore ./ValheimLauncher/ValheimLauncher.csproj
+
+      - name: Build Project
+        run: dotnet build --configuration Release ./ValheimLauncher/ValheimLauncher.csproj
+
+      - name: Publish Project
+        run: dotnet publish ./ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -o ./publish
+
+      - name: Archive Build Artifacts
+        shell: pwsh
+        run: Compress-Archive -Path "publish/*" -DestinationPath "ValheimLauncher.zip"
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          release_name: "Release ${{ github.event.inputs.version }}"
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: './ValheimLauncher.zip'
+          asset_name: 'ValheimLauncher.zip'
+          asset_content_type: 'application/zip'
