@@ -33,7 +33,7 @@ jobs:
             $latestTag = git describe --tags --abbrev=0 2>$null
           }
           Write-Output "Latest tag: $latestTag"
-          "latest_tag=$latestTag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "latest_tag=$latestTag" >> $env:GITHUB_OUTPUT
 
       - name: Validate Version Format
         if: github.event.inputs.version != ''
@@ -48,7 +48,7 @@ jobs:
         id: calculate_version
         shell: pwsh
         run: |
-          $latestTag = "${{ env.latest_tag }}"
+          $latestTag = "${{ steps.get_latest_tag.outputs.latest_tag }}"
           Write-Output "Debug: latestTag=$latestTag"
           if ("${{ github.event.inputs.version }}" -ne "") {
             $newVersion = "${{ github.event.inputs.version }}"
@@ -64,13 +64,7 @@ jobs:
             }
           }
           Write-Output "Debug: Calculated newVersion=$newVersion"
-          "new_version=$newVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
-      - name: Debug Environment After Version Calculation
-        run: |
-          echo "Debugging environment variables"
-          echo "latest_tag=${{ env.latest_tag }}"
-          echo "new_version=${{ env.new_version }}"
+          "new_version=$newVersion" >> $env:GITHUB_OUTPUT
 
       - name: Generate Changelog
         id: changelog
@@ -82,10 +76,9 @@ jobs:
           } else {
             $changelog = git log --pretty=format:"* %s"
           }
-          $changelog = $changelog -replace "'", "''" -replace "`n", "%0A"
-          "CHANGELOG<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $changelog | Out-File -FilePath $env:GITHUB_ENV -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "changelog<<EOF" >> $env:GITHUB_OUTPUT
+          $changelog >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -104,28 +97,15 @@ jobs:
       - name: Archive Build Artifacts
         run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.new_version }}
-          release_name: "Release ${{ env.new_version }}"
-          body: |
-            ${{ env.CHANGELOG }}
+          tag_name: ${{ steps.calculate_version.outputs.new_version }}
+          name: "Release ${{ steps.calculate_version.outputs.new_version }}"
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: ValheimLauncher.zip
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: './ValheimLauncher.zip'
-          asset_name: 'ValheimLauncher.zip'
-          asset_content_type: 'application/zip'
 
       - name: Push New Tag
         shell: pwsh
@@ -133,8 +113,8 @@ jobs:
           try {
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
-            git tag ${{ env.new_version }}
-            git push origin ${{ env.new_version }}
+            git tag ${{ steps.calculate_version.outputs.new_version }}
+            git push origin ${{ steps.calculate_version.outputs.new_version }}
           } catch {
             Write-Error "Failed to create and push tag: $_"
             exit 1
