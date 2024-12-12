@@ -20,7 +20,6 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history and tags
 
-
       - name: Get Latest Tag
         id: get_latest_tag
         shell: pwsh
@@ -28,30 +27,29 @@ jobs:
           # Get the latest tag or use a default if no tag exists
           $latestTag = git describe --tags --abbrev=0 2>$null
           if (-not $latestTag) {
-          $latestTag = "v0.0.0"
+            $latestTag = "v0.0.0"
           }
           Write-Output "Latest tag: $latestTag"
           echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
 
-          - name: Calculate New Version
-            id: calculate_version
-            shell: pwsh
-            run: |
-              $latestTag = "${{ env.latest_tag }}"
-              if ("${{ github.event.inputs.version }}" -ne "") {
-                # Use manual version if provided
-                $newVersion = "${{ github.event.inputs.version }}"
-              } else {
-                # Parse latest tag and increment patch version
-                $parts = $latestTag -replace "v", "" -split "\."
-                $major = [int]$parts[0]
-                $minor = [int]$parts[1]
-                $patch = [int]$parts[2] + 1
-                $newVersion = "v$major.$minor.$patch"
-              }
-              Write-Output "New version: $newVersion"
-              echo "new_version=$newVersion" >> $env:GITHUB_ENV
-
+      - name: Calculate New Version
+        id: calculate_version
+        shell: pwsh
+        run: |
+          $latestTag = "${{ env.latest_tag }}"
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            # Use manual version if provided
+            $newVersion = "${{ github.event.inputs.version }}"
+          } else {
+            # Parse latest tag and increment patch version
+            $parts = $latestTag -replace "v", "" -split "\."
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+            $patch = [int]$parts[2] + 1
+            $newVersion = "v$major.$minor.$patch"
+          }
+          Write-Output "New version: $newVersion"
+          echo "new_version=$newVersion" >> $env:GITHUB_ENV
 
       - name: Display New Version
         run: echo "Releasing version ${{ env.new_version }}"
@@ -71,7 +69,7 @@ jobs:
         run: dotnet publish ./ValheimLauncher/ValheimLauncher.csproj -c Release -r win10-x64 --self-contained true -o ./publish
 
       - name: Archive Build Artifacts
-        run: zip -r ValheimLauncher.zip ./publish
+        run: Compress-Archive -Path "./publish/*" -DestinationPath "ValheimLauncher.zip"
 
       - name: Create GitHub Release
         id: create_release
@@ -95,6 +93,7 @@ jobs:
           asset_content_type: 'application/zip'
 
       - name: Push New Tag
+        shell: pwsh
         run: |
           git tag ${{ env.new_version }}
           git push origin ${{ env.new_version }}
