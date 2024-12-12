@@ -1,101 +1,122 @@
-Valheim Mod Launcher
-A simple mod management tool that helps you distribute mods to your friends for your Valheim server. Perfect for server admins who want to make mod management easier for their players.
-🚀 Key Features
+<div align="center">
+  <h1>Valheim Mod Launcher</h1>
+</div>
 
-Auto-Updates - Launcher keeps itself and mods up to date
-Easy Install - Players just run the exe
-Simple Updates - Admins just update one zip file
-Steam Integration - Automatically finds Valheim
-Safe Updates - Verifies all mod files
+<p>A simple mod management tool that helps you distribute mods to your friends for your Valheim server. Perfect for server admins who want to make mod management easier for their players.</p>
 
-📥 For Players
+<h2>🚀 Key Features</h2>
+<ul>
+  <li><strong>Auto-Updates</strong> - Launcher keeps itself and mods up to date</li>
+  <li><strong>Easy Install</strong> - Players just run the exe</li>
+  <li><strong>Simple Updates</strong> - Admins just update one zip file</li>
+  <li><strong>Steam Integration</strong> - Automatically finds Valheim</li>
+  <li><strong>Safe Updates</strong> - Verifies all mod files</li>
+</ul>
 
-Download ValheimLauncher.zip from [Releases]
-Extract and run ValheimLauncher.exe
-Click "Yes" when updates are available
-Play!
+<h2>📥 For Players</h2>
+<ol>
+  <li>Download <code>ValheimLauncher.zip</code> from <a href="../../releases">Releases</a></li>
+  <li>Extract and run <code>ValheimLauncher.exe</code></li>
+  <li>Click "Yes" when updates are available</li>
+  <li>Play!</li>
+</ol>
 
+<blockquote>
+  <strong>Note</strong>: You need BepInEx installed in your Valheim directory first
+</blockquote>
 
-Note: You need BepInEx installed in your Valheim directory first
+<h2>🛠️ For Server Admins</h2>
+<p>Want to use this for your own server? It's easy!</p>
 
-🛠️ For Server Admins
-Want to use this for your own server? It's easy!
-Initial Setup
+<h3>Initial Setup</h3>
+<ol>
+  <li>Fork this repository</li>
+  <li>Go to Actions tab in your fork</li>
+  <li>Enable GitHub Actions</li>
+  <li>Create your first release (see below)</li>
+</ol>
 
-Fork this repository
-Go to Actions tab in your fork
-Enable GitHub Actions
-Create your first release (see below)
+<h3>Managing Mods</h3>
+<h4>Prepare your mods:</h4>
+<ul>
+  <li>Collect your BepInEx plugins</li>
+  <li>Create a zip named <code>plugins.zip</code></li>
+  <li>Structure should match your BepInEx plugins folder</li>
+</ul>
 
-Managing Mods
+<h4>Update the mods:</h4>
+<ul>
+  <li>Upload <code>plugins.zip</code> to the <code>Mods</code> folder in your repo</li>
+  <li>Commit and push</li>
+  <li>Players will get the updates automatically</li>
+</ul>
 
-Prepare your mods:
+<h3>Creating Releases</h3>
+<ol>
+  <li>Go to Actions tab</li>
+  <li>Click "Build and Release"</li>
+  <li>Click "Run workflow"</li>
+  <li>Choose version type:
+    <ul>
+      <li><code>patch</code> for small updates (1.0.0 → 1.0.1)</li>
+      <li><code>minor</code> for new features (1.0.0 → 1.1.0)</li>
+      <li><code>major</code> for big changes (1.0.0 → 2.0.0)</li>
+    </ul>
+  </li>
+</ol>
 
-Collect your BepInEx plugins
-Create a zip named plugins.zip
-Structure should match your BepInEx plugins folder
+<p>The workflow automatically:</p>
+<ul>
+  <li>Builds the launcher</li>
+  <li>Creates a release</li>
+  <li>Updates version numbers</li>
+  <li>Uploads everything needed</li>
+</ul>
 
+<h3>Distribution</h3>
+<ol>
+  <li>Share the launcher with your players</li>
+  <li>Update mods by replacing <code>plugins.zip</code></li>
+  <li>Players get updates automatically</li>
+</ol>
 
-Update the mods:
+<h2>📋 Requirements</h2>
 
-Upload plugins.zip to the Mods folder in your repo
-Commit and push
-Players will get the updates automatically
+<h3>For Players</h3>
+<ul>
+  <li>Windows 10/11</li>
+  <li>Valheim (Steam version)</li>
+  <li>BepInEx installed</li>
+</ul>
 
+<h3>For Server Admins</h3>
+<ul>
+  <li>GitHub account</li>
+  <li>Your server's mod files</li>
+</ul>
 
+<h2>❓ Common Issues</h2>
 
-Creating Releases
+<p><strong>Q: Launcher can't find Valheim</strong><br>
+A: Run as administrator</p>
 
-Go to Actions tab
-Click "Build and Release"
-Click "Run workflow"
-Choose version type:
+<p><strong>Q: Mods not working</strong><br>
+A: Make sure BepInEx is installed</p>
 
-patch for small updates (1.0.0 → 1.0.1)
-minor for new features (1.0.0 → 1.1.0)
-major for big changes (1.0.0 → 2.0.0)
+<p><strong>Q: Updates fail</strong><br>
+A: Run as administrator, check antivirus</p>
 
+<h2>🆘 Support</h2>
 
+<p>Having problems?</p>
+<ol>
+  <li>Run as administrator</li>
+  <li>Check BepInEx installation</li>
+  <li>Check <a href="../../issues">Issues</a></li>
+  <li>Create new issue with your launcher log</li>
+</ol>
 
-The workflow automatically:
+<hr>
 
-Builds the launcher
-Creates a release
-Updates version numbers
-Uploads everything needed
-
-Distribution
-
-Share the launcher with your players
-Update mods by replacing plugins.zip
-Players get updates automatically
-
-📋 Requirements
-For Players
-
-Windows 10/11
-Valheim (Steam version)
-BepInEx installed
-
-For Server Admins
-
-GitHub account
-Your server's mod files
-
-❓ Common Issues
-Q: Launcher can't find Valheim
-A: Run as administrator
-Q: Mods not working
-A: Make sure BepInEx is installed
-Q: Updates fail
-A: Run as administrator, check antivirus
-🆘 Support
-Having problems?
-
-Run as administrator
-Check BepInEx installation
-Check Issues
-Create new issue with your launcher log
-
-
-Made for Valheim server admins who just want to help their friends keep mods updated!
+<p align="center"><em>Made for Valheim server admins who just want to help their friends keep mods updated!</em></p>
+</div>
