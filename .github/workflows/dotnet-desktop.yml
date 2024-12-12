@@ -25,9 +25,8 @@ jobs:
         shell: pwsh
         run: |
           # Get the latest tag or use a default if no tag exists
-          try {
-            $latestTag = git describe --tags --abbrev=0 2>$null
-          } catch {
+          $latestTag = git describe --tags --abbrev=0 2>$null
+          if (-not $latestTag) {
             $latestTag = "v0.0.0"
           }
           Write-Output "Latest tag: $latestTag"
@@ -43,11 +42,15 @@ jobs:
             $newVersion = "${{ github.event.inputs.version }}"
           } else {
             # Parse latest tag and increment patch version
-            $parts = $latestTag -replace "v", "" -split "\."
-            $major = [int]$parts[0]
-            $minor = [int]$parts[1]
-            $patch = [int]$parts[2] + 1
-            $newVersion = "v$major.$minor.$patch"
+            if ($latestTag -eq "v0.0.0") {
+              $newVersion = "v1.0.0"
+            } else {
+              $parts = $latestTag -replace "v", "" -split "\."
+              $major = [int]$parts[0]
+              $minor = [int]$parts[1]
+              $patch = [int]$parts[2] + 1
+              $newVersion = "v$major.$minor.$patch"
+            }
           }
           Write-Output "New version: $newVersion"
           echo "new_version=$newVersion" >> $GITHUB_ENV
@@ -89,3 +92,9 @@ jobs:
           asset_path: './ValheimLauncher.zip'
           asset_name: 'ValheimLauncher.zip'
           asset_content_type: 'application/zip'
+
+      - name: Push New Tag
+        shell: pwsh
+        run: |
+          git tag ${{ env.new_version }}
+          git push origin ${{ env.new_version }}
