@@ -159,8 +159,39 @@ class Program
             return BitConverter.ToString(finalHash).Replace("-", "");
         }
     }
+    private static string? GetPluginsFolder()
+    {
+        string? steamPath = GetSteamPath();
+        if (string.IsNullOrEmpty(steamPath))
+        {
+            Console.WriteLine("Steam installation not found.");
+            return null;
+        }
 
-    [SupportedOSPlatform("windows")]
+        string libraryFoldersPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+        if (!File.Exists(libraryFoldersPath))
+        {
+            Console.WriteLine("libraryfolders.vdf not found. Cannot locate Valheim.");
+            return null;
+        }
+
+        string content = File.ReadAllText(libraryFoldersPath);
+
+        var matches = Regex.Matches(content, @"""path""\s*""([^""]+)""");
+        foreach (Match match in matches)
+        {
+            string libraryPath = match.Groups[1].Value;
+            string pluginsPath = Path.Combine(libraryPath, "steamapps", "common", "Valheim", "BepInEx", "plugins");
+            if (Directory.Exists(pluginsPath))
+            {
+                return pluginsPath;
+            }
+        }
+
+        return null;
+    }
+
+        [SupportedOSPlatform("windows")]
     private static string? GetSteamPath()
     {
         if (!OperatingSystem.IsWindows())
