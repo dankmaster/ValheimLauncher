@@ -24,10 +24,12 @@ jobs:
         id: get_latest_tag
         shell: pwsh
         run: |
-          # Get the latest tag or use a default if no tag exists
-          $latestTag = git describe --tags --abbrev=0 2>$null
-          if (-not $latestTag) {
+          # Check if there are any tags in the repository
+          $tagsExist = git tag | Measure-Object | Select-Object -ExpandProperty Count
+          if ($tagsExist -eq 0) {
             $latestTag = "v0.0.0"
+          } else {
+            $latestTag = git describe --tags --abbrev=0 2>$null
           }
           Write-Output "Latest tag: $latestTag"
           echo "latest_tag=$latestTag" >> $env:GITHUB_ENV
