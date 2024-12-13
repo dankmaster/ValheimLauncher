@@ -49,6 +49,10 @@ class Program
         public const string Progress = "[-]";
     }
 
+    private static PluginsStatus cachedPluginsStatus = PluginsStatus.Unknown;
+    private static LauncherStatus cachedLauncherStatus = LauncherStatus.Unknown;
+    private static string? cachedLatestVersion;
+    private static bool isStatusInitialized = false;
     private const string GithubOwner = "dankmaster";
     private const string GithubRepo = "ValheimLauncher";
     private const string GithubBranch = "master";
@@ -69,8 +73,10 @@ class Program
     {
         ToggleBepInEx = 1,
         CheckUpdates = 2,
-        Exit = 3
+        LaunchGame = 3,
+        Exit = 4
     }
+
     private enum LauncherStatus
     {
         UpToDate,
@@ -87,6 +93,16 @@ class Program
 
     static async Task Main()
     {
+        if (!isStatusInitialized)
+        {
+            Console.WriteLine($"{ConsoleSymbols.Info} Initializing launcher statuses...");
+            var statusTask = Task.WhenAll(
+                Task.Run(async () => (cachedLauncherStatus, cachedLatestVersion) = await GetLauncherStatus()),
+                Task.Run(async () => cachedPluginsStatus = await GetPluginsStatus())
+            );
+            await statusTask;
+            isStatusInitialized = true;
+        }
         Console.Title = "Valheim Mod Launcher";
 
         try
@@ -152,6 +168,10 @@ class Program
                     case MainMenuOption.Exit:
                         Console.WriteLine($"{ConsoleSymbols.Info} Exiting launcher...");
                         return;
+
+                    case MainMenuOption.LaunchGame:
+                        LaunchGame(valheimPath);
+                        break;
                 }
 
                 Console.WriteLine("\nPress any key to return to menu...");
@@ -185,6 +205,25 @@ class Program
             Console.WriteLine("\nPress any key to continue...");
             Console.ReadKey();
         }
+    private static void LaunchGame(string valheimPath)
+    {
+        try
+        {
+            string gameExecutable = Path.Combine(valheimPath, "valheim.exe"); // Adjust if the executable has a different name
+            if (!File.Exists(gameExecutable))
+            {
+                Console.WriteLine($"{ConsoleSymbols.Error} Valheim executable not found.");
+                return;
+            }
+
+            Console.WriteLine($"{ConsoleSymbols.Info} Launching Valheim...");
+            Process.Start(gameExecutable);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"{ConsoleSymbols.Error} Failed to launch the game: {ex.Message}");
+        }
+    }
 
     private static async Task DisplayMainMenu(BepInExStatus bepInExStatus)
     {
@@ -195,9 +234,9 @@ class Program
         var (launcherStatus, latestVersion) = await GetLauncherStatus();
 
         Console.WriteLine($"{ConsoleSymbols.Info} Current Status:");
-        Console.WriteLine($"Launcher: {GetLauncherStatusDisplay(launcherStatus, latestVersion)}");
+        Console.WriteLine($"Launcher: {GetLauncherStatusDisplay(cachedLauncherStatus, cachedLatestVersion)}");
         Console.WriteLine($"BepInEx: {GetStatusDisplay(bepInExStatus)}");
-        Console.WriteLine($"Plugins: {GetPluginsStatusDisplay(pluginsStatus)}");
+        Console.WriteLine($"Plugins: {GetPluginsStatusDisplay(cachedPluginsStatus)}");
         Console.WriteLine($"Mod Repository: {GithubOwner}/{GithubRepo} (branch: {GithubBranch})");
 
         if (launcherStatus == LauncherStatus.UpdateAvailable)
@@ -213,7 +252,8 @@ class Program
         Console.WriteLine("\nAvailable Options:");
         Console.WriteLine($"1. {GetBepInExMenuText(bepInExStatus)}");
         Console.WriteLine("2. Check for Updates");
-        Console.WriteLine("3. Exit Launcher");
+        Console.WriteLine("3. Launch Game");
+        Console.WriteLine("4. Exit Launcher");
 
         Console.Write("\nSelect an option: ");
     }
@@ -522,6 +562,8 @@ class Program
             {
                 Console.WriteLine($"{ConsoleSymbols.Progress} Mod updates available!");
                 await UpdateMods(pluginsFolder);
+                cachedPluginsStatus = await GetPluginsStatus();
+
             }
             else
             {
