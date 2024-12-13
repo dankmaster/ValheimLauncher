@@ -205,25 +205,35 @@ class Program
             Console.WriteLine("\nPress any key to continue...");
             Console.ReadKey();
         }
-    private static void LaunchGame(string valheimPath)
+    private static void LaunchGame()
     {
         try
         {
-            string gameExecutable = Path.Combine(valheimPath, "valheim.exe"); // Adjust if the executable has a different name
-            if (!File.Exists(gameExecutable))
+            const string steamAppID = "892970"; // Valheim's Steam App ID
+            string steamPath = GetSteamPath();
+
+            if (string.IsNullOrEmpty(steamPath))
             {
-                Console.WriteLine($"{ConsoleSymbols.Error} Valheim executable not found.");
+                Console.WriteLine($"{ConsoleSymbols.Error} Steam installation not found.");
                 return;
             }
 
-            Console.WriteLine($"{ConsoleSymbols.Info} Launching Valheim...");
-            Process.Start(gameExecutable);
+            string steamExe = Path.Combine(steamPath, "steam.exe");
+            if (!File.Exists(steamExe))
+            {
+                Console.WriteLine($"{ConsoleSymbols.Error} Steam executable not found.");
+                return;
+            }
+
+            Console.WriteLine($"{ConsoleSymbols.Info} Launching Valheim via Steam...");
+            Process.Start(steamExe, $"-applaunch {steamAppID}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"{ConsoleSymbols.Error} Failed to launch the game: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Error} Failed to launch Valheim via Steam: {ex.Message}");
         }
     }
+
 
     private static async Task DisplayMainMenu(BepInExStatus bepInExStatus)
     {
