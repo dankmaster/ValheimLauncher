@@ -13,18 +13,26 @@ using System.Threading.Tasks;
 using System.Reflection;
 using Microsoft.Win32;
 using System.Text.Json.Serialization;
+using System.Text;
 
 [JsonSerializable(typeof(ReleaseInfo))]
 internal partial class ReleaseContext : JsonSerializerContext { }
 
 internal class ReleaseInfo
 {
+    [JsonPropertyName("tag_name")]
     public string? TagName { get; set; }
-    public Asset[] Assets { get; set; } = Array.Empty<Asset>();
+
+    [JsonPropertyName("assets")]
+    public List<Asset>? Assets { get; set; } = new List<Asset>();
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }
 
 internal class Asset
 {
+    [JsonPropertyName("browser_download_url")]
     public string? BrowserDownloadUrl { get; set; }
 }
 
@@ -291,7 +299,11 @@ class Program
 
             response.EnsureSuccessStatusCode();
             var releaseJson = await response.Content.ReadAsStringAsync(cts.Token);
-            File.WriteAllText(AppPaths.LastUpdateCheckFile, releaseJson);
+
+            // Debug logging
+            var debugLog = new StringBuilder();
+            debugLog.AppendLine("=== Release Info Debug ===");
+            debugLog.AppendLine($"Raw JSON: {releaseJson}");
 
             var options = new JsonSerializerOptions
             {
@@ -300,40 +312,57 @@ class Program
             };
 
             var releaseInfo = JsonSerializer.Deserialize<ReleaseInfo>(releaseJson, options);
+
+            debugLog.AppendLine($"Deserialized TagName: {releaseInfo?.TagName}");
+
+            // Get current version
+            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString().TrimEnd('.', '0');
+            debugLog.AppendLine($"Current Version: {currentVersion}");
+
             if (releaseInfo?.TagName == null)
             {
-                Console.WriteLine($"{ConsoleSymbols.Warning} Invalid release info from GitHub.");
+                debugLog.AppendLine("Error: TagName is null");
+                File.WriteAllText(Path.Combine(AppPaths.LogsPath, "version_debug.log"), debugLog.ToString());
                 return (LauncherStatus.Unknown, null);
             }
 
             var latestVersion = releaseInfo.TagName.TrimStart('v');
-            var currentVersion = Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
+            debugLog.AppendLine($"Latest Version: {latestVersion}");
 
-            // For debugging
-            File.WriteAllText(
-                Path.Combine(AppPaths.LogsPath, "version_check.log"),
-                $"Current Version: {currentVersion}\nLatest Version: {latestVersion}\n"
-            );
+            // Write debug info to file
+            File.WriteAllText(Path.Combine(AppPaths.LogsPath, "version_debug.log"), debugLog.ToString());
 
-            if (Version.Parse(latestVersion) > Version.Parse(currentVersion))
+            // Normalize versions to three segments
+            var currentParts = currentVersion?.Split('.') ?? Array.Empty<string>();
+            var currentNormalized = string.Join(".", currentParts.Take(3));
+            var latest = Version.Parse(latestVersion);
+            var current = Version.Parse(currentNormalized);
+
+            debugLog.AppendLine($"Normalized Current: {currentNormalized}");
+            debugLog.AppendLine($"Comparison Result: {latest.CompareTo(current)}");
+
+            File.WriteAllText(Path.Combine(AppPaths.LogsPath, "version_debug.log"), debugLog.ToString());
+
+            if (latest > current)
             {
                 return (LauncherStatus.UpdateAvailable, latestVersion);
             }
-            else if (Version.Parse(latestVersion) == Version.Parse(currentVersion))
+            else if (latest == current)
             {
                 return (LauncherStatus.UpToDate, latestVersion);
             }
             else
             {
-                // Current version is newer than release (development version)
                 return (LauncherStatus.UpToDate, latestVersion);
             }
         }
         catch (Exception ex)
         {
             AppPaths.LogError("Launcher status check failed", ex);
-            Console.WriteLine($"{ConsoleSymbols.Error} Failed to check launcher version: {ex.Message}");
+            File.WriteAllText(
+                Path.Combine(AppPaths.LogsPath, "version_error.log"),
+                $"Error details: {ex.Message}\nStack trace: {ex.StackTrace}"
+            );
             return (LauncherStatus.Unknown, null);
         }
     }
