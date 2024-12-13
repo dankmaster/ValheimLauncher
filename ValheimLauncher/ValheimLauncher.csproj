@@ -11,5 +11,6 @@
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+	<DebugType>none</DebugType>
   </PropertyGroup>
 </Project>
