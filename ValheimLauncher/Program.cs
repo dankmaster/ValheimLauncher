@@ -165,13 +165,13 @@ class Program
                         await HandleModUpdates(valheimPath, bepInExStatus);
                         break;
 
+                    case MainMenuOption.LaunchGame:
+                        LaunchGame(); // No arguments required
+                        break;
+
                     case MainMenuOption.Exit:
                         Console.WriteLine($"{ConsoleSymbols.Info} Exiting launcher...");
                         return;
-
-                    case MainMenuOption.LaunchGame:
-                        LaunchGame(valheimPath);
-                        break;
                 }
 
                 Console.WriteLine("\nPress any key to return to menu...");
@@ -210,7 +210,7 @@ class Program
         try
         {
             const string steamAppID = "892970"; // Valheim's Steam App ID
-            string steamPath = GetSteamPath();
+            string? steamPath = GetSteamPath();
 
             if (string.IsNullOrEmpty(steamPath))
             {
@@ -233,6 +233,7 @@ class Program
             Console.WriteLine($"{ConsoleSymbols.Error} Failed to launch Valheim via Steam: {ex.Message}");
         }
     }
+
 
 
     private static async Task DisplayMainMenu(BepInExStatus bepInExStatus)
