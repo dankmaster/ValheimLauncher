@@ -442,35 +442,30 @@ class Program
             return BepInExStatus.NotInstalled;
         }
 
-        private static async Task HandleBepInExToggle(string valheimPath, BepInExStatus currentStatus)
+    private static async Task HandleBepInExToggle(string valheimPath, BepInExStatus currentStatus)
+    {
+        switch (currentStatus)
         {
-            switch (currentStatus)
-            {
-                case BepInExStatus.NotInstalled:
-                    if (PromptBepInExInstallation())
-                    {
-                        await InstallBepInEx(valheimPath);
-                    }
-                    break;
+            case BepInExStatus.NotInstalled:
+                if (PromptBepInExInstallation())
+                {
+                    await InstallBepInEx(valheimPath);
+                }
+                break;
 
-                case BepInExStatus.Enabled:
-                    Console.Write($"\n{ConsoleSymbols.Warning} Are you sure you want to disable BepInEx? (Yes/No): ");
-                    if (ConfirmAction())
-                    {
-                        DisableBepInEx(valheimPath);
-                    }
-                    break;
+            case BepInExStatus.Enabled:
+                Console.WriteLine($"{ConsoleSymbols.Info} Disabling BepInEx...");
+                DisableBepInEx(valheimPath);
+                break;
 
-                case BepInExStatus.Disabled:
-                    Console.Write($"\n{ConsoleSymbols.Info} Enable BepInEx? (Yes/No): ");
-                    if (ConfirmAction())
-                    {
-                        EnableBepInEx(valheimPath);
-                    }
-                    break;
-            }
+            case BepInExStatus.Disabled:
+                Console.WriteLine($"{ConsoleSymbols.Info} Enabling BepInEx...");
+                EnableBepInEx(valheimPath);
+                break;
         }
-        private static void DisableBepInEx(string valheimPath)
+    }
+
+    private static void DisableBepInEx(string valheimPath)
         {
             try
             {
@@ -531,12 +526,6 @@ class Program
             {
                 Console.WriteLine($"{ConsoleSymbols.Success} Mods are up to date!");
             }
-        }
-
-        private static bool ConfirmAction()
-        {
-            string? response = Console.ReadLine();
-            return !string.IsNullOrEmpty(response) && response.Equals("Yes", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string? GetValheimInstallPath()
