@@ -524,9 +524,24 @@ del ""%~f0""";
 
     private static bool IsNewerVersion(string latestVersion, string currentVersion)
     {
-        var latest = new Version(latestVersion.TrimStart('v'));
-        var current = new Version(currentVersion);
-        return latest > current;
+        try
+        {
+            // Remove 'v' prefix if present
+            latestVersion = latestVersion.TrimStart('v');
+            currentVersion = currentVersion.TrimStart('v');
+
+            // Parse versions into Version objects
+            Version latest = Version.Parse(latestVersion);
+            Version current = Version.Parse(currentVersion);
+
+            // Compare versions
+            return latest > current;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"{ConsoleSymbols.Warning} Version comparison error: {ex.Message}");
+            return false;
+        }
     }
 
     private static async Task<bool> TestUpdateNeeded(string pluginsFolder)
