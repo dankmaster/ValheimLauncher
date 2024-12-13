@@ -254,9 +254,9 @@ class Program
 
         return status switch
         {
-            LauncherStatus.UpToDate => $"Up to date (v{currentVersion})",
+            LauncherStatus.UpToDate => $"Up to date (Current: v{currentVersion})",
             LauncherStatus.UpdateAvailable => $"Update available! (Current: v{currentVersion}, Latest: v{latestVersion})",
-            LauncherStatus.Unknown => $"Status unknown (v{currentVersion})",
+            LauncherStatus.Unknown => $"Status check failed (Current: v{currentVersion})",
             _ => "Unknown"
         };
     }
@@ -284,7 +284,10 @@ class Program
             var response = await httpClient.GetAsync($"{GithubApiBaseUrl}/releases/latest", cts.Token);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Console.WriteLine($"{ConsoleSymbols.Warning} No releases found on GitHub.");
                 return (LauncherStatus.Unknown, null);
+            }
 
             response.EnsureSuccessStatusCode();
             var releaseJson = await response.Content.ReadAsStringAsync(cts.Token);
@@ -298,22 +301,43 @@ class Program
 
             var releaseInfo = JsonSerializer.Deserialize<ReleaseInfo>(releaseJson, options);
             if (releaseInfo?.TagName == null)
+            {
+                Console.WriteLine($"{ConsoleSymbols.Warning} Invalid release info from GitHub.");
                 return (LauncherStatus.Unknown, null);
+            }
 
             var latestVersion = releaseInfo.TagName.TrimStart('v');
             var currentVersion = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
 
-            return IsNewerVersion($"v{latestVersion}", currentVersion)
-                ? (LauncherStatus.UpdateAvailable, latestVersion)
-                : (LauncherStatus.UpToDate, latestVersion);
+            // For debugging
+            File.WriteAllText(
+                Path.Combine(AppPaths.LogsPath, "version_check.log"),
+                $"Current Version: {currentVersion}\nLatest Version: {latestVersion}\n"
+            );
+
+            if (Version.Parse(latestVersion) > Version.Parse(currentVersion))
+            {
+                return (LauncherStatus.UpdateAvailable, latestVersion);
+            }
+            else if (Version.Parse(latestVersion) == Version.Parse(currentVersion))
+            {
+                return (LauncherStatus.UpToDate, latestVersion);
+            }
+            else
+            {
+                // Current version is newer than release (development version)
+                return (LauncherStatus.UpToDate, latestVersion);
+            }
         }
         catch (Exception ex)
         {
             AppPaths.LogError("Launcher status check failed", ex);
+            Console.WriteLine($"{ConsoleSymbols.Error} Failed to check launcher version: {ex.Message}");
             return (LauncherStatus.Unknown, null);
         }
     }
+
     private static async Task<PluginsStatus> GetPluginsStatus()
         {
             try
