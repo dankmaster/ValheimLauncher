@@ -465,6 +465,7 @@ class Program
         }
     }
 
+
     private static void DisableBepInEx(string valheimPath)
         {
             try
@@ -526,6 +527,12 @@ class Program
             {
                 Console.WriteLine($"{ConsoleSymbols.Success} Mods are up to date!");
             }
+        }
+
+        private static bool ConfirmAction()
+        {
+            string? response = Console.ReadLine();
+            return !string.IsNullOrEmpty(response) && response.Equals("Yes", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string? GetValheimInstallPath()
