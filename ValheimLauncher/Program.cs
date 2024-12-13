@@ -63,6 +63,12 @@ class Program
         CheckUpdates = 2,
         Exit = 3
     }
+    private enum LauncherStatus
+    {
+        UpToDate,
+        UpdateAvailable,
+        Unknown
+    }
 
     private enum PluginsStatus
     {
@@ -172,27 +178,90 @@ class Program
             Console.ReadKey();
         }
 
-        private static async Task DisplayMainMenu(BepInExStatus bepInExStatus)
+    private static async Task DisplayMainMenu(BepInExStatus bepInExStatus)
+    {
+        Console.Clear();
+        DisplayWelcomeMessage();
+
+        var pluginsStatus = await GetPluginsStatus();
+        var (launcherStatus, latestVersion) = await GetLauncherStatus();
+
+        Console.WriteLine($"{ConsoleSymbols.Info} Current Status:");
+        Console.WriteLine($"Launcher: {GetLauncherStatusDisplay(launcherStatus, latestVersion)}");
+        Console.WriteLine($"BepInEx: {GetStatusDisplay(bepInExStatus)}");
+        Console.WriteLine($"Plugins: {GetPluginsStatusDisplay(pluginsStatus)}");
+        Console.WriteLine($"Mod Repository: {GithubOwner}/{GithubRepo} (branch: {GithubBranch})");
+
+        if (launcherStatus == LauncherStatus.UpdateAvailable)
         {
-            Console.Clear();
-            DisplayWelcomeMessage();
-
-            var pluginsStatus = await GetPluginsStatus();  // Now we can await the result
-
-            Console.WriteLine($"{ConsoleSymbols.Info} Current Status:");
-            Console.WriteLine($"BepInEx: {GetStatusDisplay(bepInExStatus)}");
-            Console.WriteLine($"Plugins: {GetPluginsStatusDisplay(pluginsStatus)}");
-            Console.WriteLine($"Mod Repository: {GithubOwner}/{GithubRepo} (branch: {GithubBranch})");
-
-            Console.WriteLine("\nAvailable Options:");
-            Console.WriteLine($"1. {GetBepInExMenuText(bepInExStatus)}");
-            Console.WriteLine("2. Check for Updates");
-            Console.WriteLine("3. Exit Launcher");
-
-            Console.Write("\nSelect an option: ");
+            Console.WriteLine($"\n{ConsoleSymbols.Warning} Launcher update available! Would you like to update now? (Yes/No): ");
+            if (ConfirmAction())
+            {
+                await HandleLauncherUpdate(latestVersion!);
+                return;
+            }
         }
 
-        private static string GetPluginsStatusDisplay(PluginsStatus status)
+        Console.WriteLine("\nAvailable Options:");
+        Console.WriteLine($"1. {GetBepInExMenuText(bepInExStatus)}");
+        Console.WriteLine("2. Check for Updates");
+        Console.WriteLine("3. Exit Launcher");
+
+        Console.Write("\nSelect an option: ");
+    }
+
+    private static async Task HandleLauncherUpdate(string latestVersion)
+    {
+        try
+        {
+            Console.WriteLine($"\n{ConsoleSymbols.Progress} Downloading launcher update v{latestVersion}...");
+            var response = await httpClient.GetAsync($"{GithubApiBaseUrl}/releases/latest");
+            response.EnsureSuccessStatusCode();
+
+            var releaseJson = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            var releaseInfo = JsonSerializer.Deserialize<ReleaseInfo>(releaseJson, options);
+
+            var assetUrl = releaseInfo?.Assets?.FirstOrDefault()?.BrowserDownloadUrl;
+            if (string.IsNullOrEmpty(assetUrl))
+            {
+                Console.WriteLine($"{ConsoleSymbols.Error} No download asset found in release.");
+                return;
+            }
+
+            await DownloadFileAsync(assetUrl, AppPaths.UpdateZip);
+            CreateUpdateScript(AppPaths.UpdateZip);
+
+            Console.WriteLine($"{ConsoleSymbols.Info} Press any key to restart and install the update...");
+            Console.ReadKey();
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"{ConsoleSymbols.Error} Update failed: {ex.Message}");
+            Console.WriteLine($"{ConsoleSymbols.Info} Press any key to continue...");
+            Console.ReadKey();
+        }
+    }
+
+    private static string GetLauncherStatusDisplay(LauncherStatus status, string? latestVersion)
+    {
+        var currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
+
+        return status switch
+        {
+            LauncherStatus.UpToDate => $"Up to date (v{currentVersion})",
+            LauncherStatus.UpdateAvailable => $"Update available! (Current: v{currentVersion}, Latest: v{latestVersion})",
+            LauncherStatus.Unknown => $"Status unknown (v{currentVersion})",
+            _ => "Unknown"
+        };
+    }
+
+    private static string GetPluginsStatusDisplay(PluginsStatus status)
         {
             return status switch
             {
@@ -203,7 +272,49 @@ class Program
             };
         }
 
-        private static async Task<PluginsStatus> GetPluginsStatus()
+    private static async Task<(LauncherStatus Status, string? LatestVersion)> GetLauncherStatus()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            httpClient.DefaultRequestHeaders.Clear();
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ValheimLauncher");
+            httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github.v3+json");
+
+            var response = await httpClient.GetAsync($"{GithubApiBaseUrl}/releases/latest", cts.Token);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (LauncherStatus.Unknown, null);
+
+            response.EnsureSuccessStatusCode();
+            var releaseJson = await response.Content.ReadAsStringAsync(cts.Token);
+            File.WriteAllText(AppPaths.LastUpdateCheckFile, releaseJson);
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            var releaseInfo = JsonSerializer.Deserialize<ReleaseInfo>(releaseJson, options);
+            if (releaseInfo?.TagName == null)
+                return (LauncherStatus.Unknown, null);
+
+            var latestVersion = releaseInfo.TagName.TrimStart('v');
+            var currentVersion = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "0.0.0";
+
+            return IsNewerVersion($"v{latestVersion}", currentVersion)
+                ? (LauncherStatus.UpdateAvailable, latestVersion)
+                : (LauncherStatus.UpToDate, latestVersion);
+        }
+        catch (Exception ex)
+        {
+            AppPaths.LogError("Launcher status check failed", ex);
+            return (LauncherStatus.Unknown, null);
+        }
+    }
+    private static async Task<PluginsStatus> GetPluginsStatus()
         {
             try
             {
